@@ -58,8 +58,10 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-echo "› signing (ad-hoc; IME needs no TCC identity)"
-codesign --force --deep --sign - "$BUNDLE"
+# Developer ID (not ad-hoc): macOS is more reliable about indexing a stably-signed
+# input method into the input-source list. Set TINE_SIGN_ID=- to force ad-hoc.
+echo "› signing ($SIGN_ID)"
+codesign --force --deep --sign "$SIGN_ID" "$BUNDLE"
 
 echo ""
 echo "Installed. Now:"
