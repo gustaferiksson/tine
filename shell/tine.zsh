@@ -13,6 +13,8 @@ export TINE_SOCK
 _TINE_US=$'\x1f'
 _TINE_ACTIVE=0
 _TINE_REPLY=""
+_TINE_HIST=0   # in shell-history navigation (Up past the top row), like Fig
+_TINE_NAV=0    # one-shot: the next redraw came from our own history nav, not typing
 
 # Request/response with the app. Sends "<type><US><cursor><US><cwd><US><buffer>"
 # and stores the reply line in _TINE_REPLY. Best-effort; never blocks the prompt.
@@ -31,17 +33,47 @@ _tine_req() {
 }
 
 # Fires on every buffer/cursor change: refresh suggestions, track whether the
-# panel is showing (reply = suggestion count).
-_tine_feed() { _tine_req update && _TINE_ACTIVE=${_TINE_REPLY:-0}; }
+# panel is showing (reply = suggestion count). A redraw caused by our own history
+# navigation keeps the panel hidden and stays in history mode; any other change
+# (the user typing) exits history mode and refreshes suggestions.
+_tine_feed() {
+  if [[ ${_TINE_NAV:-0} -eq 1 ]]; then _TINE_NAV=0; return; fi
+  _TINE_HIST=0
+  _tine_req update && _TINE_ACTIVE=${_TINE_REPLY:-0}
+}
 zle -N _tine_feed
 
 # Hide the panel when the line is submitted/abandoned.
-_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; }
+_tine_hide() { _tine_req dismiss; _TINE_ACTIVE=0; _TINE_HIST=0; _TINE_NAV=0; }
 zle -N _tine_hide
 
-# Arrow keys: move the selection while the panel is up, else normal history.
-_tine_up()   { if [[ ${_TINE_ACTIVE:-0} -gt 0 ]]; then _tine_req up;   else zle up-line-or-history;   fi; }
-_tine_down() { if [[ ${_TINE_ACTIVE:-0} -gt 0 ]]; then _tine_req down; else zle down-line-or-history; fi; }
+# Hand off to zsh history (Up past the top row, or Down/Up with no panel). Hides
+# the panel and enters history mode so subsequent arrows keep navigating history
+# — like Fig — until the user types again.
+_tine_history() {
+  [[ ${_TINE_ACTIVE:-0} -gt 0 ]] && _tine_req dismiss
+  _TINE_ACTIVE=0; _TINE_HIST=1; _TINE_NAV=1
+  zle "$1"
+}
+
+# Arrow keys: move the selection while the panel is up, else navigate history.
+# The app replies "PASS" when it can't move (panel not actually visible, or Up at
+# the top row) — hand off to history so navigation isn't hijacked. Down only ever
+# moves down the list (clamped) or navigates history; it never leaves history mode.
+_tine_up() {
+  if [[ ${_TINE_HIST:-0} -eq 0 && ${_TINE_ACTIVE:-0} -gt 0 ]] \
+     && _tine_req up && [[ "$_TINE_REPLY" != "PASS" ]]; then
+    return
+  fi
+  _tine_history up-line-or-history
+}
+_tine_down() {
+  if [[ ${_TINE_HIST:-0} -eq 0 && ${_TINE_ACTIVE:-0} -gt 0 ]] \
+     && _tine_req down && [[ "$_TINE_REPLY" != "PASS" ]]; then
+    return
+  fi
+  _tine_history down-line-or-history
+}
 zle -N _tine_up
 zle -N _tine_down
 

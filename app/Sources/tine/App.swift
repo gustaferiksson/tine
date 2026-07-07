@@ -62,9 +62,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return "\(self.state.suggestions.count)"
             case "up":
+                // Let the key fall through to the terminal (zsh history) when the
+                // panel isn't actually showing, or when already at the top row —
+                // otherwise Up could never reach history.
+                if self.panel?.isVisible != true || self.state.selectedIndex == 0 {
+                    return "PASS"
+                }
                 self.state.moveSelection(-1)
                 return "\(self.state.suggestions.count)"
             case "down":
+                if self.panel?.isVisible != true {
+                    return "PASS"
+                }
                 self.state.moveSelection(1)
                 return "\(self.state.suggestions.count)"
             case "accept":

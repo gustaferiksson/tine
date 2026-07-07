@@ -46,6 +46,7 @@ struct SuggestionListView: View {
             }
             .scrollTargetLayout()
         }
+        .scrollIndicators(.hidden)
         .scrollPosition(id: $topID, anchor: .top)
         .frame(height: rowHeight * CGFloat(min(count == 0 ? 1 : count, maxRows)))
         .padding(.vertical, 4)
