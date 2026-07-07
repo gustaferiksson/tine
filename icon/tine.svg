@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#233247"/>
+      <stop offset="0.55" stop-color="#141c2b"/>
+      <stop offset="1" stop-color="#0a0e17"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="0.44" cy="0.44" r="0.55">
+      <stop offset="0" stop-color="#5eead4" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#5eead4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glyph" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#7df0dc"/>
+      <stop offset="1" stop-color="#22c9e0"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0.03"/>
+      <stop offset="0.72" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <clipPath id="tileClip">
+      <rect x="92" y="92" width="840" height="840" rx="196" ry="196"/>
+    </clipPath>
+  </defs>
+
+  <!-- squircle tile -->
+  <rect x="92" y="92" width="840" height="840" rx="196" ry="196" fill="url(#tile)"/>
+  <g clip-path="url(#tileClip)">
+    <rect x="92" y="92" width="840" height="840" fill="url(#aura)"/>
+    <rect x="92" y="92" width="840" height="840" fill="url(#sheen)"/>
+  </g>
+
+  <!-- shell prompt: chevron + caret -->
+  <g fill="none" stroke="url(#glyph)" stroke-width="74" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="372,360 556,512 372,664"/>
+  </g>
+  <rect x="576" y="618" width="196" height="56" rx="28" ry="28" fill="url(#glyph)"/>
+
+  <!-- crisp inner edge -->
+  <rect x="92.5" y="92.5" width="839" height="839" rx="195.5" ry="195.5"
+        fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="2"/>
+</svg>

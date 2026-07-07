@@ -1,0 +1,8 @@
+{
+  "extends": ["@tine/tsconfig/base.json", "@tine/tsconfig/dom.json"],
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["@tine/types", "@withfig/autocomplete-types"]
+  },
+  "include": ["src"]
+}

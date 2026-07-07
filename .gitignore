@@ -1,0 +1,82 @@
+## User settings
+xcuserdata/
+
+## gcc Patch
+/*.gcno
+
+# Misc
+.DS_Store
+node_modules/
+.eslintcache
+yarn-error.log
+yarn.lock
+package-lock.json
+*.info
+*.swp
+*.swo
+*.pending-snap
+*.sig
+*.asc
+coverage/
+.turbo
+
+# Python
+__pycache__
+.venv
+
+# Ignore all compiled protobuf artifacts
+**/*.pb.ts
+
+target/
+build
+book/
+.vscode-test/
+
+# ide folders
+.vscode/
+.fleet/
+.idea/
+
+# yarn v2
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+.env*
+
+run-build.sh
+# Amazon Q CLI files
+.amazonq/
+
+# generated spec pack (downloaded/converted at build/install time)
+specs/
+
+# generated engine bundle
+app/engine/tine-engine.js
+
+# generated full spec pack (160M)
+specs-pack/
+
+# Swift build output
+.build/
+
+# Packaged artifacts
+dist/
+
+# Vendored amazon-q monorepo kept locally as reference only (not published)
+/crates/
+/models/
+/proto/
+/build-config/
+/build-scripts/
+/bundle/
+/ops-scripts/
+/rfcs/
+/tests/
+/spike/
+/.cargo/
+/.github/

@@ -1,0 +1,17 @@
+tine
+Copyright 2026 Gustaf Eriksson
+
+This product is a derivative work based on the Amazon Q Developer CLI
+(https://github.com/aws/amazon-q-developer-cli-autocomplete), which is
+Copyright Amazon.com, Inc. or its affiliates, and dual-licensed under the
+MIT and Apache License 2.0.
+
+tine retains only the local, terminal-autocomplete functionality (the native
+macOS suggestion window, the pseudo-terminal edit-buffer intercept, the macOS
+input method, and the Fig-spec autocomplete engine). The Amazon Q AI/chat,
+cloud service clients, authentication, telemetry, dashboard, and non-macOS
+platform support have been removed.
+
+The original MIT and Apache 2.0 license texts are retained in LICENSE.MIT and
+LICENSE.APACHE. Fig autocomplete specs are sourced from
+https://github.com/withfig/autocomplete (MIT).
