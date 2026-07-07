@@ -3,11 +3,22 @@ import Foundation
 let TINE_US = "\u{1f}"
 
 /// One request from the shell feed (shell/tine.zsh).
-/// Wire format (one line): type US cursor US cwd US buffer
+/// Wire format (one line): type US cursor US cwd US pos US buffer
+/// `pos` is "anchorRow;anchorCol;cols;rows;cellW;cellH" (semicolon-joined): the
+/// prompt-start cell + terminal grid + cell size in device pixels, captured once
+/// per prompt via idle-tty DSR. It lets the app place the panel in canvas
+/// terminals (Ghostty) whose Accessibility can't report the caret — the app
+/// derives the caret cell from the buffer/cursor it already holds.
 struct Request {
     let type: String   // update | up | down | accept | dismiss
     let cursor: Int
     let cwd: String
+    let anchorRow: Int
+    let anchorCol: Int
+    let cols: Int
+    let rows: Int
+    let cellW: Int     // device pixels
+    let cellH: Int     // device pixels
     let buffer: String
 }
 
@@ -89,11 +100,22 @@ final class SocketServer {
         guard let s = String(data: data, encoding: .utf8) else { return nil }
         let parts = s.components(separatedBy: TINE_US)
         guard parts.count >= 4 else { return nil }
+        // Extended feed carries a positioning field before the buffer; the buffer
+        // stays last (it may itself contain the US separator).
+        let extended = parts.count >= 5
+        let pos = extended ? parts[3].components(separatedBy: ";").map { Int($0) ?? 0 } : []
+        func p(_ i: Int) -> Int { i < pos.count ? pos[i] : 0 }
         return Request(
             type: parts[0],
             cursor: Int(parts[1]) ?? 0,
             cwd: parts[2],
-            buffer: parts[3...].joined(separator: TINE_US)
+            anchorRow: p(0),
+            anchorCol: p(1),
+            cols: p(2),
+            rows: p(3),
+            cellW: p(4),
+            cellH: p(5),
+            buffer: parts[(extended ? 4 : 3)...].joined(separator: TINE_US)
         )
     }
 }

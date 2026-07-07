@@ -5,8 +5,8 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var installer = SpecInstaller()
 
-    // Re-read externally-owned state (Accessibility grant, IME, login item) so the
-    // UI reflects changes made outside the app without needing a relaunch.
+    // Re-read externally-owned state (Accessibility grant, login item) so the UI
+    // reflects changes made outside the app without needing a relaunch.
     @State private var axTrusted = AXCaret.isTrusted
     @State private var startAtLogin = SMAppService.mainApp.status == .enabled
     private let refresh = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
@@ -18,10 +18,6 @@ struct SettingsView: View {
                          ("Courier New", "Courier New")]
     private let shellLine = "source ~/.local/share/tine/tine.zsh"
 
-    @State private var imeEnabled = IMEManager.isEnabled
-    @State private var imeMessage = ""
-
-    private var imeInstalled: Bool { IMEManager.isInstalled }
     private var shellInstalled: Bool {
         FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.local/share/tine/tine.zsh")
     }
@@ -35,19 +31,6 @@ struct SettingsView: View {
                     Button("Grant") {
                         AXCaret.ensureTrusted()
                         openPane("com.apple.preference.security?Privacy_Accessibility")
-                    }
-                }
-                setupRow("Input method", ok: imeInstalled && imeEnabled,
-                         detail: "Only needed for Ghostty caret tracking.") {
-                    HStack(spacing: 8) {
-                        Button(imeEnabled ? "Enabled" : "Enable") {
-                            imeMessage = IMEManager.enable() ?? ""
-                            imeEnabled = IMEManager.isEnabled
-                        }
-                        .disabled(!imeInstalled || imeEnabled)
-                        if !imeMessage.isEmpty {
-                            Text(imeMessage).font(.caption).foregroundStyle(.orange).lineLimit(2)
-                        }
                     }
                 }
                 setupRow("Shell integration", ok: shellInstalled,
@@ -123,7 +106,6 @@ struct SettingsView: View {
         .frame(width: 560, height: 600)
         .onReceive(refresh) { _ in
             axTrusted = AXCaret.isTrusted
-            imeEnabled = IMEManager.isEnabled
         }
     }
 

@@ -46,8 +46,8 @@ echo 'source ~/.local/share/tine/tine.zsh' >> ~/.zshrc
 ```
 
 Then grant **Accessibility** (System Settings → Privacy & Security → Accessibility)
-so the panel can track your cursor. For Ghostty, enable the bundled input method
-(Settings → Input method → Enable).
+so the panel can track your cursor. Works in Terminal, iTerm2, VSCode, and Ghostty
+— no pseudo-terminal, so nothing can leak your keystrokes.
 
 ## Releasing
 

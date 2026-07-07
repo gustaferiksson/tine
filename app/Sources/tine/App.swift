@@ -10,9 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var idleHide: DispatchWorkItem?
     private var statusItem: NSStatusItem?
     private var sockPath = ""
-    // Latest caret rect from the input method (screen coords), for terminals
-    // whose Accessibility can't report it (Ghostty).
-    private var imeCaret: (rect: CGRect, at: Date)?
+    // Latest shell positioning feed: prompt-anchor cell + grid + cell size (device
+    // px), for computing the caret in canvas terminals (Ghostty) where AX can't.
+    private var lastFeed: (anchorRow: Int, anchorCol: Int, cols: Int, rows: Int,
+                           cellW: Int, cellH: Int, cursor: Int, buffer: String)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no dock icon
@@ -54,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return "0" }
             switch req.type {
             case "update":
+                self.lastFeed = (req.anchorRow, req.anchorCol, req.cols, req.rows,
+                                 req.cellW, req.cellH, req.cursor, req.buffer)
                 let changed = self.state.update(
                     FeedMessage(cursor: req.cursor, cwd: req.cwd, buffer: req.buffer))
                 if changed {
@@ -103,18 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return "\(c)\(TINE_US)\(b)"
                 }
                 return ""
-            case "caret":
-                // From the input method: "caret US x US y US height" (screen coords).
-                let x = CGFloat(req.cursor)
-                let y = CGFloat(Int(req.cwd) ?? 0)
-                let h = CGFloat(Int(req.buffer) ?? 0)
-                self.imeCaret = (CGRect(x: x, y: y, width: 0, height: h), Date())
-                tlog("caret[IME] rect=(\(x),\(y),h=\(h)) -> point=\(String(describing: self.imeCaretPoint()))")
-                // If the panel is up (AX couldn't place it), correct its position.
-                if self.panel?.isVisible == true, let p = self.imeCaretPoint() {
-                    self.panel?.present(at: p)
-                }
-                return "0"
             case "aliases":
                 // buffer = the shell's `alias` output, lines joined by US.
                 var map: [String: String] = [:]
@@ -208,9 +199,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let panel = self.panel else { return }
             let ax = AXCaret.caretTopLeftBelow()
             let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p) } } ?? false
-            // Prefer Accessibility; fall back to the input-method caret (Ghostty),
-            // then to a screen corner.
-            let pos = (ax != nil && axOnScreen) ? ax! : (self.imeCaretPoint() ?? self.fallbackCorner())
+            // Prefer Accessibility (Terminal, iTerm2, VSCode); fall back to the
+            // shell-anchored cell for canvas terminals (Ghostty), then a corner.
+            let pos = (ax != nil && axOnScreen) ? ax!
+                : (self.terminalCellPoint() ?? self.fallbackCorner())
             panel.present(at: pos)
         }
         repositionWork = work
@@ -218,12 +210,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleIdleHide()
     }
 
-    /// Panel top-left just below the input-method caret, if recent.
-    private func imeCaretPoint(gap: CGFloat = 4) -> CGPoint? {
-        guard let c = imeCaret, Date().timeIntervalSince(c.at) < 2 else { return nil }
-        // firstRectForCharacterRange is screen coords (Cocoa, bottom-left); the
-        // rect's origin.y is the line's bottom, so drop just below it.
-        return CGPoint(x: c.rect.origin.x, y: c.rect.origin.y - gap)
+    /// Panel top-left just below the caret in a canvas terminal (Ghostty), derived
+    /// from the shell's prompt-anchor cell + grid and the buffer offset. AX gives
+    /// the text-area frame; the grid divides it into cells.
+    private func terminalCellPoint(gap: CGFloat = 4) -> CGPoint? {
+        guard let f = lastFeed, f.cols > 0, f.rows > 0, f.anchorRow > 0, f.anchorCol > 0,
+              let rect = AXCaret.focusedElementRect() else { return nil }
+        let consumed = (f.anchorCol - 1) + f.buffer.prefix(f.cursor).count
+        let col = consumed % f.cols
+        let row = min((f.anchorRow - 1) + consumed / f.cols, f.rows - 1)
+
+        // The AX rect is the whole text-area element, larger than the glyph grid
+        // (balanced padding). Use the terminal-reported cell size (device px → pt)
+        // for exact cells, and centre the grid in the rect. Fall back to rect÷grid.
+        let scale = screen(containing: rect)?.backingScaleFactor ?? 2
+        let cellW = f.cellW > 0 ? CGFloat(f.cellW) / scale : rect.width / CGFloat(f.cols)
+        let cellH = f.cellH > 0 ? CGFloat(f.cellH) / scale : rect.height / CGFloat(f.rows)
+        let originX = rect.minX + max(0, rect.width - cellW * CGFloat(f.cols)) / 2
+        // The glyph grid is centred within the AX text-area rect (balanced padding).
+        let originY = rect.minY + max(0, rect.height - cellH * CGFloat(f.rows)) / 2
+
+        let x = originX + CGFloat(col) * cellW
+        let cellBottomAX = originY + CGFloat(row + 1) * cellH
+        let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height ?? 0
+        return CGPoint(x: x, y: primaryHeight - cellBottomAX - gap)
+    }
+
+    /// The screen the AX rect (top-left origin) sits on, for its backing scale.
+    private func screen(containing rect: CGRect) -> NSScreen? {
+        let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height ?? 0
+        let cocoaCenter = CGPoint(x: rect.midX, y: primaryHeight - rect.midY)
+        return NSScreen.screens.first { $0.frame.contains(cocoaCenter) } ?? NSScreen.main
     }
 
     /// Safety net: hide if no buffer updates arrive for a while (terminal closed,

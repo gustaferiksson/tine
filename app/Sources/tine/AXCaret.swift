@@ -86,6 +86,25 @@ enum AXCaret {
         return CGRect(origin: pos, size: sz)
     }
 
+    /// Frame of the focused UI element (screen coords, top-left origin). For a
+    /// canvas terminal (Ghostty) this is the whole text area — the origin + grid
+    /// the app needs to turn a cursor cell into a pixel position.
+    static func focusedElementRect() -> CGRect? {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let f = focused else { return nil }
+        var posRef: CFTypeRef?, szRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(f as! AXUIElement, kAXPositionAttribute as CFString, &posRef) == .success,
+              AXUIElementCopyAttributeValue(f as! AXUIElement, kAXSizeAttribute as CFString, &szRef) == .success,
+              let p = posRef, let s = szRef else { return nil }
+        var pos = CGPoint.zero, sz = CGSize.zero
+        AXValueGetValue(p as! AXValue, .cgPoint, &pos)
+        AXValueGetValue(s as! AXValue, .cgSize, &sz)
+        guard sz.width > 0, sz.height > 0 else { return nil }
+        return CGRect(origin: pos, size: sz)
+    }
+
     private static func valid(_ rect: CGRect?) -> Bool {
         guard let r = rect else { return false }
         return r.origin.x.isFinite && r.origin.y.isFinite && r.height > 0

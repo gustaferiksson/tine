@@ -6,7 +6,7 @@
 #
 # Enable from ~/.zshrc:  source /path/to/tine.zsh
 
-# Fixed default so the app + input method (which don't see this env) agree.
+# Fixed default so the app (which doesn't see this env) agrees on the path.
 : ${TINE_SOCK:="$HOME/.local/share/tine/tine.sock"}
 export TINE_SOCK
 
@@ -15,6 +15,39 @@ _TINE_ACTIVE=0
 _TINE_REPLY=""
 _TINE_HIST=0   # in shell-history navigation (Up past the top row), like Fig
 _TINE_NAV=0    # one-shot: the next redraw came from our own history nav, not typing
+_TINE_AROW=1   # prompt-start cursor row (1-based), captured once per prompt
+_TINE_ACOL=1   # prompt-start cursor column (1-based)
+_TINE_CW=0     # cell width in device pixels (0 = unknown)
+_TINE_CH=0     # cell height in device pixels
+
+# Cell pixel size, queried once per prompt while the tty is idle (precmd, before
+# the prompt is drawn — position doesn't matter here, only the cell size).
+_tine_cellsize() {
+  emulate -L zsh
+  local saved b tty=${TTY:-/dev/tty}
+  saved=$(stty -g <$tty 2>/dev/null) || return
+  stty raw -echo <$tty 2>/dev/null
+  print -n $'\e[16t' >$tty                # cell size in px -> ESC[6;height;widtht
+  read -r -d t -t 0.3 b <$tty
+  stty $saved <$tty 2>/dev/null
+  b=${b#*$'\e['}; _TINE_CH=${${b#*;}%%;*}; _TINE_CW=${b##*;}
+  [[ "$_TINE_CW" == <-> && "$_TINE_CH" == <-> ]] || { _TINE_CW=0; _TINE_CH=0; }
+}
+
+# Prompt-start cursor cell, captured at line-init — after the prompt is drawn and
+# before the user types, so the cursor sits exactly where the buffer begins. This
+# is the anchor the app offsets the buffer against to place the panel in canvas
+# terminals (Ghostty). Not a pty — one cursor-position query per prompt on the
+# terminal we already own. ZLE has the tty in raw mode, so no stty dance.
+_tine_line_init() {
+  local reply
+  print -n -- $'\e[6n' >/dev/tty
+  read -r -d R -t 0.3 reply </dev/tty
+  reply=${reply#*$'\e['}
+  _TINE_AROW=${reply%%;*}
+  _TINE_ACOL=${reply##*;}
+  [[ "$_TINE_AROW" == <-> && "$_TINE_ACOL" == <-> ]] || { _TINE_AROW=1; _TINE_ACOL=1; }
+}
 
 # Request/response with the app. Sends "<type><US><cursor><US><cwd><US><buffer>"
 # and stores the reply line in _TINE_REPLY. Best-effort; never blocks the prompt.
@@ -25,7 +58,7 @@ _tine_req() {
   local fd
   zsocket "$TINE_SOCK" 2>/dev/null || return 1
   fd=$REPLY
-  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${BUFFER}"
+  print -u "$fd" -r -- "${type}${_TINE_US}${CURSOR}${_TINE_US}${PWD}${_TINE_US}${_TINE_AROW};${_TINE_ACOL};${COLUMNS};${LINES};${_TINE_CW};${_TINE_CH}${_TINE_US}${BUFFER}"
   _TINE_REPLY=""
   IFS= read -r -u "$fd" _TINE_REPLY
   exec {fd}>&-
@@ -138,15 +171,19 @@ _tine_send_aliases() {
   dump="$(alias | tr '\n' "$_TINE_US")"
   zsocket "$TINE_SOCK" 2>/dev/null || return
   fd=$REPLY
-  print -u "$fd" -r -- "aliases${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}${dump}"
+  print -u "$fd" -r -- "aliases${_TINE_US}0${_TINE_US}${PWD}${_TINE_US}0;0;0;0;0;0${_TINE_US}${dump}"
   IFS= read -r -u "$fd" reply
   exec {fd}>&-
 }
 autoload -Uz add-zsh-hook 2>/dev/null
-(( $+functions[add-zsh-hook] )) && add-zsh-hook precmd _tine_send_aliases
+if (( $+functions[add-zsh-hook] )); then
+  add-zsh-hook precmd _tine_send_aliases
+  add-zsh-hook precmd _tine_cellsize
+fi
 
 autoload -Uz add-zle-hook-widget 2>/dev/null
 if (( $+functions[add-zle-hook-widget] )); then
+  add-zle-hook-widget line-init _tine_line_init
   add-zle-hook-widget line-pre-redraw _tine_feed
   add-zle-hook-widget line-finish _tine_hide
 
