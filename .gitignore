@@ -64,8 +64,8 @@ specs-pack/
 # Swift build output
 .build/
 
-# Packaged artifacts
-dist/
+# Packaged artifacts (root only — NOT packages/*/dist, which the engine bundles)
+/dist/
 
 # Vendored amazon-q monorepo kept locally as reference only (not published)
 # (proto/ IS a JS workspace package — @tine/proto — so it stays tracked)
