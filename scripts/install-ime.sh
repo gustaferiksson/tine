@@ -29,12 +29,14 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>TineIME</string>
   <key>CFBundleIdentifier</key><string>dev.gustaf.tine.inputmethod</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleSignature</key><string>????</string>
   <key>CFBundleShortVersionString</key><string>0.0.1</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
-  <key>LSBackgroundOnly</key><true/>
+  <key>LSUIElement</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>InputMethodConnectionName</key><string>TineIME_1_Connection</string>
   <key>InputMethodServerControllerClass</key><string>TineInputController</string>
-  <key>tsInputMethodCharacterRepertoire</key>
+  <key>tsInputMethodCharacterRepertoireKey</key>
   <array><string>Latn</string></array>
   <key>ComponentInputModeDict</key>
   <dict>
@@ -57,6 +59,10 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+# Real .app bundles carry a PkgInfo; some macOS scanners require it to classify
+# the bundle as an application (and, with the keys above, an input method).
+printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
 # Developer ID + hardened runtime (required for notarization). macOS 26 refuses
 # to register an un-notarized input method, so a plain Developer ID signature is
