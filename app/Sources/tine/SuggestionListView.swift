@@ -67,15 +67,25 @@ struct SuggestionListView: View {
         }
     }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        // `glassEffect` only exists in the macOS 26 SDK (Swift 6.2+). Guard at
+        // compile time so older SDKs (CI runners) fall back to the material.
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *), state.config.glass {
             content.glassEffect(.regular.tint(tint.opacity(0.12)), in: RoundedRectangle(cornerRadius: 12))
         } else {
-            content
-                .background(VisualEffectView(material: .hudWindow))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12)))
+            materialContent
         }
+        #else
+        materialContent
+        #endif
+    }
+
+    private var materialContent: some View {
+        content
+            .background(VisualEffectView(material: .hudWindow))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12)))
     }
 
     /// Ctrl+K detail column for the selected suggestion (Apple-HUD style).
