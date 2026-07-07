@@ -1,9 +1,19 @@
 import Foundation
 
-/// Runs the shell commands that Fig generators request (git branch, ls, ).
+/// Runs the shell commands that Fig generators request (git branch, ls, …).
 /// Synchronous with a timeout — fits the engine's synchronous suggestion pass.
 /// Input/output are JSON to keep the JS<->Swift boundary simple.
 enum CommandRunner {
+    // The engine's generator cache uses stale-while-revalidate: it returns the
+    // cached result but still re-runs the generator to revalidate on every
+    // keystroke. Because this bridge is synchronous, that revalidation spawns a
+    // blocking subprocess per character — the per-key lag when typing a
+    // `git checkout <branch>` argument. Cache the raw output briefly, keyed by the
+    // exact command, so repeated identical calls skip the subprocess entirely.
+    // Called only on the main thread (from the engine during a suggest pass).
+    private static var cache: [String: (output: String, at: Date)] = [:]
+    private static let ttl: TimeInterval = 3
+
     static func run(_ inputJSON: String) -> String {
         func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
             let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
@@ -17,11 +27,18 @@ enum CommandRunner {
         else { return encode(stdout: "", stderr: "tine: bad command input", exitCode: 1) }
 
         let args = input["args"] as? [String] ?? []
+        let cwd = input["workingDirectory"] as? String ?? ""
+
+        let key = "\(cwd)\u{1f}\(executable)\u{1f}\(args.joined(separator: "\u{1f}"))"
+        if let hit = cache[key], Date().timeIntervalSince(hit.at) < ttl {
+            return hit.output
+        }
+
         let proc = Process()
         // Resolve the executable via PATH.
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments = [executable] + args
-        if let cwd = input["workingDirectory"] as? String, !cwd.isEmpty {
+        if !cwd.isEmpty {
             proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
         }
         var environment = ProcessInfo.processInfo.environment
@@ -48,10 +65,15 @@ enum CommandRunner {
         proc.waitUntilExit()
         killer.cancel()
 
-        return encode(
+        let result = encode(
             stdout: String(data: out, encoding: .utf8) ?? "",
             stderr: String(data: err, encoding: .utf8) ?? "",
             exitCode: proc.terminationStatus
         )
+        cache[key] = (result, Date())
+        if cache.count > 128 {
+            cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
+        }
+        return result
     }
 }
