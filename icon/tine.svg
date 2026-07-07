@@ -31,11 +31,12 @@
     <rect x="92" y="92" width="840" height="840" fill="url(#sheen)"/>
   </g>
 
-  <!-- shell prompt: chevron + caret -->
-  <g fill="none" stroke="url(#glyph)" stroke-width="74" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="372,360 556,512 372,664"/>
+  <!-- motion mark: forward chevrons with a fading speed trail -->
+  <g fill="none" stroke="url(#glyph)" stroke-width="62" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="300,384 440,512 300,640" opacity="0.22"/>
+    <polyline points="450,384 590,512 450,640" opacity="0.5"/>
+    <polyline points="600,384 740,512 600,640" opacity="1"/>
   </g>
-  <rect x="576" y="618" width="196" height="56" rx="28" ry="28" fill="url(#glyph)"/>
 
   <!-- crisp inner edge -->
   <rect x="92.5" y="92.5" width="839" height="839" rx="195.5" ry="195.5"
