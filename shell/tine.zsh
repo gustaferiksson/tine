@@ -20,19 +20,28 @@ _TINE_ACOL=1   # prompt-start cursor column (1-based)
 _TINE_CW=0     # cell width in device pixels (0 = unknown)
 _TINE_CH=0     # cell height in device pixels
 
-# Cell pixel size — queried once per session (it only changes on a font/display
-# change, rare enough to pick up on the next shell). Querying every prompt would
-# stall the full read timeout on terminals that don't answer 16t (e.g. Terminal.app,
-# which uses the Accessibility path and never needs this anyway).
+# Terminals whose caret Accessibility reports directly (Terminal, iTerm2, VSCode)
+# use the AX path and need no shell-side cursor anchor — so we skip the tty
+# queries there entirely. Everything else (Ghostty and other canvas/GPU terminals)
+# gets the DSR anchor below.
+_tine_ax_terminal() {
+  case "${TERM_PROGRAM:-}" in (Apple_Terminal|iTerm.app|vscode) return 0 ;; esac
+  return 1
+}
+
+# Cell pixel size — only queried in canvas terminals, and retried each prompt
+# until it lands (it only changes on a font/display change, so once it succeeds
+# it sticks for the session). Gating out the AX terminals means the retry never
+# stalls a terminal that doesn't answer 16t.
 _tine_cellsize() {
   emulate -L zsh
-  [[ -n ${_TINE_CELL_DONE:-} ]] && return
-  _TINE_CELL_DONE=1
+  _tine_ax_terminal && return
+  [[ ${_TINE_CW:-0} -gt 0 ]] && return
   local saved b tty=${TTY:-/dev/tty}
   saved=$(stty -g <$tty 2>/dev/null) || return
   stty raw -echo <$tty 2>/dev/null
   print -n $'\e[16t' >$tty                # cell size in px -> ESC[6;height;widtht
-  read -r -d t -t 0.1 b <$tty
+  read -r -d t -t 0.3 b <$tty
   stty $saved <$tty 2>/dev/null
   b=${b#*$'\e['}; _TINE_CH=${${b#*;}%%;*}; _TINE_CW=${b##*;}
   [[ "$_TINE_CW" == <-> && "$_TINE_CH" == <-> ]] || { _TINE_CW=0; _TINE_CH=0; }
@@ -44,9 +53,10 @@ _tine_cellsize() {
 # terminals (Ghostty). Not a pty — one cursor-position query per prompt on the
 # terminal we already own. ZLE has the tty in raw mode, so no stty dance.
 _tine_line_init() {
+  _tine_ax_terminal && return
   local reply
   print -n -- $'\e[6n' >/dev/tty
-  read -r -d R -t 0.1 reply </dev/tty
+  read -r -d R -t 0.3 reply </dev/tty   # generous: -d R returns the instant the reply lands; the timeout only caps a missing reply
   reply=${reply#*$'\e['}
   _TINE_AROW=${reply%%;*}
   _TINE_ACOL=${reply##*;}
