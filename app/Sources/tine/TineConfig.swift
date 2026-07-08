@@ -9,6 +9,7 @@ struct TineConfig: Codable, Equatable {
     var fontSize: Double = 12
     var firstTokenCompletion: Bool = true   // complete bare command names
     var showDetail: Bool = false            // Ctrl+K detail pane visible
+    var showMenuBarIcon: Bool = true        // status-bar item visible
     // User's own specs (loaded first, override the pack). Fig's equivalent of ~/.q/specs.
     var localSpecsDir: String = "\(NSHomeDirectory())/.tine/specs"
 

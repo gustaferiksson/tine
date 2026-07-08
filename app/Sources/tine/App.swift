@@ -1,8 +1,10 @@
 import AppKit
+import Combine
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState()
+    private var cancellables = Set<AnyCancellable>()
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     private var mainWindow: NSWindow?
@@ -142,6 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AXCaret.ensureTrusted()
         tlog("listening on \(sockPath) (AX trusted: \(AXCaret.isTrusted))")
         setupStatusItem()
+
+        // Show/hide the menu-bar item live when the setting changes.
+        state.$config
+            .map(\.showMenuBarIcon)
+            .removeDuplicates()
+            .sink { [weak self] visible in self?.statusItem?.isVisible = visible }
+            .store(in: &cancellables)
     }
 
     /// Menu-bar item: shows which build is running (name + socket) and gives a
@@ -153,9 +162,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Tine"
         let isDev = Bundle.main.bundleIdentifier?.hasSuffix(".dev") ?? false
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // chevron.forward.2 echoes the app icon's forward-motion mark. Dev builds
+        // keep a distinct hammer so two menu-bar items are tellable apart.
         item.button?.image = NSImage(
-            systemSymbolName: isDev ? "hammer.fill" : "wand.and.stars", accessibilityDescription: name)
+            systemSymbolName: isDev ? "hammer.fill" : "chevron.forward.2", accessibilityDescription: name)
         item.button?.toolTip = name
+        item.isVisible = state.config.showMenuBarIcon
 
         let menu = NSMenu()
         let header = NSMenuItem(title: name, action: nil, keyEquivalent: "")
