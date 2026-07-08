@@ -163,7 +163,9 @@ function toItems(filtered: readonly unknown[], searchTerm: string): TineSuggesti
 // Command names for first-token completion: spec index ∪ aliases ∪ history.
 let cachedSpecNames: string[] | undefined;
 function specNames(): string[] {
-  if (cachedSpecNames) return cachedSpecNames;
+  // Don't cache an empty result: the pack may still be downloading on first run,
+  // so re-read until the index has content (then it sticks).
+  if (cachedSpecNames && cachedSpecNames.length) return cachedSpecNames;
   try {
     const g = globalThis as { __tineSpecsDir?: string; __tineReadFile?: (p: string) => string };
     const raw = g.__tineReadFile?.(`${g.__tineSpecsDir ?? ""}/index.json`) ?? "";

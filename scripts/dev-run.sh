@@ -45,11 +45,8 @@ bash "$ROOT/scripts/build-engine.sh"
 mkdir -p "$BUNDLE/Contents/Resources"
 cp "$ROOT/icon/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$ROOT/app/engine/tine-engine.js" "$BUNDLE/Contents/Resources/"
-# Ensure the full spec pack is installed (first run builds + installs it).
-if [ ! -d "$HOME/.local/share/tine/specs" ]; then
-  echo "› installing spec pack (first run)"
-  bash "$ROOT/scripts/install-specs.sh"
-fi
+# tine's built-in specs (tine.js); the completion pack is downloaded at runtime.
+cp -R "$ROOT/builtin-specs" "$BUNDLE/Contents/Resources/builtin-specs"
 # Keep the sourced shell integration current.
 mkdir -p "$HOME/.local/share/tine"
 cp "$ROOT/shell/tine.zsh" "$HOME/.local/share/tine/tine.zsh"

@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState()
     private var cancellables = Set<AnyCancellable>()
+    private var specInstaller: SpecInstaller?
     private var panel: SuggestionPanel?
     private var server: SocketServer?
     private var mainWindow: NSWindow?
@@ -36,12 +37,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withIntermediateDirectories: true)
 
         let resources = Bundle.main.resourcePath ?? "."
-        let installed = "\(NSHomeDirectory())/.local/share/tine/specs"
-        let specsDir = env["TINE_SPECS_DIR"]
-            ?? (FileManager.default.fileExists(atPath: installed) ? installed : "\(resources)/specs")
+        // The pack is downloaded at runtime (SpecInstaller), not bundled. The
+        // engine reads it lazily, so it works once files land — even if the
+        // download finishes after launch.
+        let specsDir = env["TINE_SPECS_DIR"] ?? SpecInstaller.specsDir
         state.engine = JSEngine(specsDir: specsDir,
                                 localSpecsDirs: state.config.localSpecsDirsExpanded,
                                 resourcesDir: resources)
+
+        // First run (or a wiped pack): download it in the background. Suggestions
+        // are just empty until it lands; nothing blocks.
+        if !SpecInstaller.isInstalled() {
+            let installer = SpecInstaller()
+            installer.onInstalled = { [weak self] in self?.scheduleRefresh() }
+            installer.install()
+            specInstaller = installer
+        }
 
         state.engine?.setFirstTokenEnabled(state.config.firstTokenCompletion)
 

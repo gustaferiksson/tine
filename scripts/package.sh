@@ -34,8 +34,6 @@ APP="$DIST/Tine.app"
 VERSION="${TINE_VERSION:-0.1.0}"
 BUILD="${TINE_BUILD:-1}"
 SIGN_ID="${TINE_SIGN_ID:-Developer ID Application: Gustaf Eriksson (82K3YC8HVF)}"
-BUNDLE_SPECS=1
-[ "${1:-}" = "--no-specs" ] && BUNDLE_SPECS=0
 
 echo "› release build"
 (cd "$APPDIR" && swift build -c release)
@@ -53,12 +51,10 @@ cp "$ROOT/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp "$ROOT/app/engine/tine-engine.js" "$APP/Contents/Resources/tine-engine.js"
 cp "$ROOT/shell/tine.zsh" "$APP/Contents/Resources/tine.zsh"
 
-if [ "$BUNDLE_SPECS" = 1 ] && [ -d "$HOME/.local/share/tine/specs" ]; then
-  echo "  bundling spec pack (self-contained)"
-  cp -R "$HOME/.local/share/tine/specs" "$APP/Contents/Resources/specs"
-elif [ "$BUNDLE_SPECS" = 1 ]; then
-  echo "  ⚠ no spec pack at ~/.local/share/tine/specs — run scripts/install-specs.sh first (or --no-specs)"
-fi
+# The completion pack is downloaded at runtime (SpecInstaller), not bundled —
+# keeps the app small. Only tine's own built-in specs (tine.js) ship in the app;
+# they're merged into the downloaded pack on install.
+cp -R "$ROOT/builtin-specs" "$APP/Contents/Resources/builtin-specs"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

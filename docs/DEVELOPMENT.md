@@ -23,10 +23,14 @@ and Ghostty — no pseudo-terminal, so nothing can leak your keystrokes.
 
 ## Specs
 
-`scripts/build-specs.sh` converts the `@withfig/autocomplete` specs (ESM → CJS so
-JavaScriptCore can eval them) into `specs-pack/`; `scripts/install-specs.sh` copies
-that to `~/.local/share/tine/specs` (where the app loads it). `dev-run.sh` runs both
-as needed.
+The completion pack is **downloaded at runtime** — the app fetches it from the
+[`tinecli/autocomplete`](https://github.com/tinecli/autocomplete) fork's rolling
+`specs` release and extracts it to `~/.local/share/tine/specs` (first launch, or via
+Settings → "Install / Update Specs"). So there's nothing to build locally; just run
+the app. To publish an updated pack, run the `Spec pack` workflow in the fork.
+
+tine's own built-in specs live in `builtin-specs/` (e.g. the `tine` CLI spec); they
+ship in the app bundle and are merged into the downloaded pack on install.
 
 ## Releasing
 

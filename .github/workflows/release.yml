@@ -41,12 +41,8 @@ jobs:
 
       - name: Install JS deps
         run: corepack pnpm install
-
-      - name: Fetch upstream Fig specs
-        run: corepack pnpm add -w -D @withfig/autocomplete
-
-      - name: Build + install spec pack
-        run: bash scripts/install-specs.sh
+      # No spec pack here — the app downloads it at runtime from
+      # tinecli/autocomplete's `specs` release (built by that repo's workflow).
 
       - name: Import signing certificate
         env:

@@ -1,8 +1,9 @@
 import Foundation
 
-/// Installs/updates the spec pack. Today it runs the repo's install-specs.sh
-/// (dev). Once the pack is hosted (task #8), swap this for a URL download +
-/// extract to ~/.local/share/tine/specs.
+/// Downloads the completion spec pack at runtime and installs it to
+/// ~/.local/share/tine/specs — so specs update without an app release. The pack
+/// is built + published by the tinecli/autocomplete fork; the app's own
+/// built-in specs (builtin-specs/, e.g. the `tine` CLI) are merged in on top.
 @MainActor
 final class SpecInstaller: ObservableObject {
     enum Status: Equatable {
@@ -10,20 +11,33 @@ final class SpecInstaller: ObservableObject {
     }
     @Published var status: Status = .idle
 
-    /// Distinct CLIs covered by the pack. Counted as unique top-level entries —
-    /// one `foo.js` or one `foo/` directory each — NOT index.json entries, which
-    /// list one per spec *file* (a single tool like `aws` fragments into hundreds
-    /// of files, ~2x-inflating the number vs. how other tools report coverage).
+    /// Pinned HTTPS release asset — same trust root as the notarized app. Never
+    /// make this a user-configurable host.
+    nonisolated static let packURL = URL(string:
+        "https://github.com/tinecli/autocomplete/releases/download/specs/specs.tar.gz")!
+    nonisolated static let specsDir = "\(NSHomeDirectory())/.local/share/tine/specs"
+
+    /// Called after a successful install (main thread) so the app can refresh.
+    var onInstalled: (() -> Void)?
+
+    /// True once at least one spec tile is present.
+    nonisolated static func isInstalled() -> Bool {
+        (try? FileManager.default.contentsOfDirectory(atPath: specsDir))?
+            .contains { $0.hasSuffix(".js") } ?? false
+    }
+
+    /// Distinct CLIs covered by the pack — unique top-level entries (one `foo.js`
+    /// or one `foo/` directory each), NOT index.json entries (which list one per
+    /// spec *file*; `aws` alone fragments into hundreds).
     nonisolated static func installedCount() -> Int {
-        let dir = "\(NSHomeDirectory())/.local/share/tine/specs"
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return 0 }
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: specsDir) else { return 0 }
         var clis = Set<String>()
         for e in entries {
             if e.hasSuffix(".js") {
                 clis.insert(String(e.dropLast(3)))
             } else {
                 var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: "\(dir)/\(e)", isDirectory: &isDir), isDir.boolValue {
+                if FileManager.default.fileExists(atPath: "\(specsDir)/\(e)", isDirectory: &isDir), isDir.boolValue {
                     clis.insert(e)
                 }
             }
@@ -31,39 +45,77 @@ final class SpecInstaller: ObservableObject {
         return clis.count
     }
 
-    /// The repo root, inferred from the .app location in dev (…/tine/.build/tine.app).
-    private static func repoRoot() -> String? {
-        let app = Bundle.main.bundlePath as NSString                 // …/.build/tine.app
-        let repo = (app.deletingLastPathComponent as NSString).deletingLastPathComponent
-        return FileManager.default.fileExists(atPath: "\(repo)/scripts/install-specs.sh") ? repo : nil
-    }
-
     func install() {
         guard status != .running else { return }
-        guard let repo = Self.repoRoot() else {
-            status = .failed("No spec source configured (hosting: task #8).")
-            return
-        }
         status = .running
-        Task.detached {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/bin/bash")
-            proc.arguments = ["\(repo)/scripts/install-specs.sh"]
-            let pipe = Pipe()
-            proc.standardOutput = pipe
-            proc.standardError = pipe
+        Task {
             do {
-                try proc.run()
-                proc.waitUntilExit()
-                let ok = proc.terminationStatus == 0
-                let count = SpecInstaller.installedCount()
-                await MainActor.run {
-                    self.status = ok ? .done("\(count) commands installed")
-                                     : .failed("install-specs.sh exited \(proc.terminationStatus)")
-                }
+                let count = try await Self.downloadAndInstall()
+                self.status = .done("\(count) commands")
+                self.onInstalled?()
             } catch {
-                await MainActor.run { self.status = .failed("\(error)") }
+                self.status = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    nonisolated private static func downloadAndInstall() async throws -> Int {
+        let fm = FileManager.default
+        let (tmp, resp) = try await URLSession.shared.download(from: packURL)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw NSError(domain: "tine", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "spec download failed (HTTP error)"])
+        }
+
+        let staging = NSTemporaryDirectory() + "tine-specs-\(UUID().uuidString)"
+        try fm.createDirectory(atPath: staging, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(atPath: staging) }
+
+        let tar = Process()
+        tar.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        tar.arguments = ["-xzf", tmp.path, "-C", staging]
+        try tar.run()
+        tar.waitUntilExit()
+        guard tar.terminationStatus == 0 else {
+            throw NSError(domain: "tine", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "spec extract failed"])
+        }
+
+        mergeBuiltins(into: staging)
+
+        // Swap into place: remove the old dir, move staging in.
+        try fm.createDirectory(atPath: (specsDir as NSString).deletingLastPathComponent,
+                               withIntermediateDirectories: true)
+        try? fm.removeItem(atPath: specsDir)
+        try fm.moveItem(atPath: staging, toPath: specsDir)
+        return installedCount()
+    }
+
+    /// Copy the app's bundled built-in specs (builtin-specs/, e.g. tine.js) into
+    /// the pack and register them in index.json so they resolve like pack specs.
+    nonisolated private static func mergeBuiltins(into dir: String) {
+        let fm = FileManager.default
+        guard let res = Bundle.main.resourcePath else { return }
+        let builtin = "\(res)/builtin-specs"
+        guard let files = try? fm.contentsOfDirectory(atPath: builtin) else { return }
+
+        var names: [String] = []
+        for f in files where f.hasSuffix(".js") {
+            try? fm.copyItem(atPath: "\(builtin)/\(f)", toPath: "\(dir)/\(f)")
+            names.append(String(f.dropLast(3)))
+        }
+        guard !names.isEmpty else { return }
+
+        let idxPath = "\(dir)/index.json"
+        guard let data = fm.contents(atPath: idxPath),
+              var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return }
+        var comps = (obj["completions"] as? [String]) ?? []
+        for n in names where !comps.contains(n) { comps.append(n) }
+        obj["completions"] = comps
+        if obj["diffVersionedCompletions"] == nil { obj["diffVersionedCompletions"] = [String]() }
+        if let out = try? JSONSerialization.data(withJSONObject: obj) {
+            try? out.write(to: URL(fileURLWithPath: idxPath))
         }
     }
 }
