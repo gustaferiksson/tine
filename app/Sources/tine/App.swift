@@ -198,12 +198,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let work = DispatchWorkItem { [weak self] in
             guard let self, let panel = self.panel else { return }
             let ax = AXCaret.caretTopLeftBelow()
-            let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p) } } ?? false
+            let axOnScreen = ax.map { p in NSScreen.screens.contains { $0.frame.contains(p.point) } } ?? false
             // Prefer Accessibility (Terminal, iTerm2, VSCode); fall back to the
             // shell-anchored cell for canvas terminals (Ghostty), then a corner.
-            let pos = (ax != nil && axOnScreen) ? ax!
-                : (self.terminalCellPoint() ?? self.fallbackCorner())
-            panel.present(at: pos)
+            let placement = (ax != nil && axOnScreen) ? ax!
+                : (self.terminalCellPoint() ?? (self.fallbackCorner(), 16))
+            panel.present(at: placement.point, lineHeight: placement.lineHeight)
         }
         repositionWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02, execute: work)
@@ -213,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Panel top-left just below the caret in a canvas terminal (Ghostty), derived
     /// from the shell's prompt-anchor cell + grid and the buffer offset. AX gives
     /// the text-area frame; the grid divides it into cells.
-    private func terminalCellPoint(gap: CGFloat = 4) -> CGPoint? {
+    private func terminalCellPoint(gap: CGFloat = 4) -> (point: CGPoint, lineHeight: CGFloat)? {
         guard let f = lastFeed, f.cols > 0, f.rows > 0, f.anchorRow > 0, f.anchorCol > 0,
               let rect = AXCaret.focusedElementRect() else { return nil }
         let consumed = (f.anchorCol - 1) + f.buffer.prefix(f.cursor).count
@@ -234,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cellBottomAX = originY + CGFloat(row + 1) * cellH
         let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
             ?? NSScreen.main?.frame.height ?? 0
-        return CGPoint(x: x, y: primaryHeight - cellBottomAX - gap)
+        return (CGPoint(x: x, y: primaryHeight - cellBottomAX - gap), cellH)
     }
 
     /// The screen the AX rect (top-left origin) sits on, for its backing scale.

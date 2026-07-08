@@ -11,8 +11,10 @@ enum AXCaret {
 
     static var isTrusted: Bool { AXIsProcessTrusted() }
 
-    /// Top-left point (Cocoa, bottom-left origin) just below the caret, or nil.
-    static func caretTopLeftBelow(gap: CGFloat = 4) -> NSPoint? {
+    /// Top-left point (Cocoa, bottom-left origin) just below the caret plus the
+    /// caret's line height (so the panel can flip cleanly above it near the screen
+    /// bottom), or nil.
+    static func caretTopLeftBelow(gap: CGFloat = 4) -> (point: NSPoint, lineHeight: CGFloat)? {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
         let system = AXUIElementCreateSystemWide()
 
@@ -67,7 +69,7 @@ enum AXCaret {
         let point = NSPoint(x: anchorX, y: caretBottomCocoaY - gap)
 
         tlog("AX[\(app)] caret=\(caret) rect=\(r) anchorRight=\(anchorRight) -> \(point)")
-        return point
+        return (point, r.height)
     }
 
     // The focused element's own frame, but only when it's caret-sized. A
