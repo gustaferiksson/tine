@@ -20,7 +20,7 @@ directory that overrides the shipped pack.
 ## Install
 
 ```sh
-brew install --cask gustaferiksson/tap/tine
+brew install --cask tinecli/tap/tine
 ```
 
 Then finish setup:

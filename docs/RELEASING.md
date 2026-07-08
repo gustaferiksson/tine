@@ -2,7 +2,7 @@
 
 Tag a version and push — the `Release` GitHub Action builds the spec pack + app,
 packages a Developer ID signed + notarized dmg, publishes a GitHub Release, and bumps
-the Homebrew cask in `gustaferiksson/homebrew-tap`:
+the Homebrew cask in `tinecli/homebrew-tap`:
 
 ```sh
 git tag v0.1.1 && git push origin v0.1.1
