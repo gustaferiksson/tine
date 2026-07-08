@@ -4,23 +4,30 @@ import Foundation
 /// Synchronous with a timeout — fits the engine's synchronous suggestion pass.
 /// Input/output are JSON to keep the JS<->Swift boundary simple.
 enum CommandRunner {
-    // The engine's generator cache uses stale-while-revalidate: it returns the
-    // cached result but still re-runs the generator to revalidate on every
-    // keystroke. Because this bridge is synchronous, that revalidation spawns a
-    // blocking subprocess per character — the per-key lag when typing a
-    // `git checkout <branch>` argument. Cache the raw output briefly, keyed by the
-    // exact command, so repeated identical calls skip the subprocess entirely.
-    // Called only on the main thread (from the engine during a suggest pass).
+    // Fig's generator cache is stale-while-revalidate: it re-runs the generator
+    // every keystroke. This bridge used to run that subprocess *synchronously on
+    // the main thread*, so the first call for a new command (e.g. `git branch`
+    // when you type the space after `git checkout`) blocked the keystroke.
+    //
+    // Now the subprocess runs on a background queue: a fresh cache hit returns
+    // immediately, a miss returns the stale value (or empty) at once and refreshes
+    // the cache in the background, so the next keystroke has it. In-flight commands
+    // are deduped so rapid keystrokes don't spawn duplicate runs. `run` is called
+    // on the main thread (from the engine); `cache`/`inflight` are lock-guarded
+    // because the background work mutates them.
     private static var cache: [String: (output: String, at: Date)] = [:]
+    private static var inflight: Set<String> = []
+    private static let lock = NSLock()
+    private static let queue = DispatchQueue(label: "dev.gustaf.tine.generator", attributes: .concurrent)
     private static let ttl: TimeInterval = 3
 
-    static func run(_ inputJSON: String) -> String {
-        func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
-            let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
-            let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
-            return String(data: data, encoding: .utf8) ?? #"{"stdout":"","stderr":"","exitCode":1}"#
-        }
+    private static func encode(stdout: String, stderr: String, exitCode: Int32) -> String {
+        let obj: [String: Any] = ["stdout": stdout, "stderr": stderr, "exitCode": Int(exitCode)]
+        let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data()
+        return String(data: data, encoding: .utf8) ?? #"{"stdout":"","stderr":"","exitCode":1}"#
+    }
 
+    static func run(_ inputJSON: String) -> String {
         guard let data = inputJSON.data(using: .utf8),
               let input = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let executable = input["executable"] as? String, !executable.isEmpty
@@ -28,23 +35,48 @@ enum CommandRunner {
 
         let args = input["args"] as? [String] ?? []
         let cwd = input["workingDirectory"] as? String ?? ""
-
+        let env = input["environment"] as? [String: String] ?? [:]
+        let timeoutMs = input["timeout"] as? Double
         let key = "\(cwd)\u{1f}\(executable)\u{1f}\(args.joined(separator: "\u{1f}"))"
-        if let hit = cache[key], Date().timeIntervalSince(hit.at) < ttl {
+
+        lock.lock()
+        let hit = cache[key]
+        let dup = inflight.contains(key)
+        if !dup { inflight.insert(key) }
+        lock.unlock()
+
+        if let hit, Date().timeIntervalSince(hit.at) < ttl {
+            // Fresh: also clear the inflight marker we may have just set.
+            if !dup { lock.lock(); inflight.remove(key); lock.unlock() }
             return hit.output
         }
 
+        // Stale or missing: refresh off the main thread so the keystroke never
+        // blocks. Return the stale value if we have one, else an empty success.
+        if !dup {
+            queue.async {
+                let result = execute(executable: executable, args: args, cwd: cwd,
+                                     env: env, timeoutMs: timeoutMs)
+                lock.lock()
+                cache[key] = (result, Date())
+                inflight.remove(key)
+                if cache.count > 128 {
+                    cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
+                }
+                lock.unlock()
+            }
+        }
+        return hit?.output ?? encode(stdout: "", stderr: "", exitCode: 0)
+    }
+
+    private static func execute(executable: String, args: [String], cwd: String,
+                                env: [String: String], timeoutMs: Double?) -> String {
         let proc = Process()
-        // Resolve the executable via PATH.
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")   // resolve via PATH
         proc.arguments = [executable] + args
-        if !cwd.isEmpty {
-            proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        }
+        if !cwd.isEmpty { proc.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         var environment = ProcessInfo.processInfo.environment
-        if let env = input["environment"] as? [String: String] {
-            for (k, v) in env { environment[k] = v }
-        }
+        for (k, v) in env { environment[k] = v }
         proc.environment = environment
 
         let outPipe = Pipe(), errPipe = Pipe()
@@ -55,11 +87,6 @@ enum CommandRunner {
             return encode(stdout: "", stderr: "\(error)", exitCode: 127)
         }
 
-        // This runs synchronously on the main thread inside a suggest pass, so the
-        // shell keystroke blocks until it returns. Cap the wait at 2s (was 5s) so a
-        // slow/hung generator can't freeze typing — stale-while-revalidate covers
-        // the empty result, and real generators (git branch, ls) finish well under.
-        let timeoutMs = input["timeout"] as? Double
         let timeout = min(timeoutMs.map { $0 / 1000.0 } ?? 2.0, 2.0)
         let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
@@ -69,15 +96,10 @@ enum CommandRunner {
         proc.waitUntilExit()
         killer.cancel()
 
-        let result = encode(
+        return encode(
             stdout: String(data: out, encoding: .utf8) ?? "",
             stderr: String(data: err, encoding: .utf8) ?? "",
             exitCode: proc.terminationStatus
         )
-        cache[key] = (result, Date())
-        if cache.count > 128 {
-            cache = cache.filter { Date().timeIntervalSince($0.value.at) < ttl }
-        }
-        return result
     }
 }
