@@ -319,13 +319,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// path the user sources, if it isn't there yet (dev-run copies it directly).
     private static func installShellIntegration() {
         let dest = "\(NSHomeDirectory())/.local/share/tine/tine.zsh"
-        guard !FileManager.default.fileExists(atPath: dest),
-              let res = Bundle.main.resourcePath else { return }
-        let src = "\(res)/tine.zsh"
-        guard FileManager.default.fileExists(atPath: src) else { return }
+        guard let res = Bundle.main.resourcePath,
+              let data = FileManager.default.contents(atPath: "\(res)/tine.zsh") else { return }
         try? FileManager.default.createDirectory(
             atPath: (dest as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
-        try? FileManager.default.copyItem(atPath: src, toPath: dest)
+        // Always overwrite so brew upgrades deliver shell-side changes — it's a
+        // managed file the user sources, not edits. (Open a new shell, or re-source,
+        // to pick it up in already-running sessions.)
+        try? data.write(to: URL(fileURLWithPath: dest))
     }
 
     private func showMainWindow() {
