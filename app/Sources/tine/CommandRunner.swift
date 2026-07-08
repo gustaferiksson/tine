@@ -55,8 +55,12 @@ enum CommandRunner {
             return encode(stdout: "", stderr: "\(error)", exitCode: 127)
         }
 
+        // This runs synchronously on the main thread inside a suggest pass, so the
+        // shell keystroke blocks until it returns. Cap the wait at 2s (was 5s) so a
+        // slow/hung generator can't freeze typing — stale-while-revalidate covers
+        // the empty result, and real generators (git branch, ls) finish well under.
         let timeoutMs = input["timeout"] as? Double
-        let timeout = timeoutMs.map { $0 / 1000.0 } ?? 5.0
+        let timeout = min(timeoutMs.map { $0 / 1000.0 } ?? 2.0, 2.0)
         let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
 

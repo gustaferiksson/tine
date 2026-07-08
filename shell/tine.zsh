@@ -20,15 +20,19 @@ _TINE_ACOL=1   # prompt-start cursor column (1-based)
 _TINE_CW=0     # cell width in device pixels (0 = unknown)
 _TINE_CH=0     # cell height in device pixels
 
-# Cell pixel size, queried once per prompt while the tty is idle (precmd, before
-# the prompt is drawn — position doesn't matter here, only the cell size).
+# Cell pixel size — queried once per session (it only changes on a font/display
+# change, rare enough to pick up on the next shell). Querying every prompt would
+# stall the full read timeout on terminals that don't answer 16t (e.g. Terminal.app,
+# which uses the Accessibility path and never needs this anyway).
 _tine_cellsize() {
   emulate -L zsh
+  [[ -n ${_TINE_CELL_DONE:-} ]] && return
+  _TINE_CELL_DONE=1
   local saved b tty=${TTY:-/dev/tty}
   saved=$(stty -g <$tty 2>/dev/null) || return
   stty raw -echo <$tty 2>/dev/null
   print -n $'\e[16t' >$tty                # cell size in px -> ESC[6;height;widtht
-  read -r -d t -t 0.3 b <$tty
+  read -r -d t -t 0.1 b <$tty
   stty $saved <$tty 2>/dev/null
   b=${b#*$'\e['}; _TINE_CH=${${b#*;}%%;*}; _TINE_CW=${b##*;}
   [[ "$_TINE_CW" == <-> && "$_TINE_CH" == <-> ]] || { _TINE_CW=0; _TINE_CH=0; }
@@ -42,7 +46,7 @@ _tine_cellsize() {
 _tine_line_init() {
   local reply
   print -n -- $'\e[6n' >/dev/tty
-  read -r -d R -t 0.3 reply </dev/tty
+  read -r -d R -t 0.1 reply </dev/tty
   reply=${reply#*$'\e['}
   _TINE_AROW=${reply%%;*}
   _TINE_ACOL=${reply##*;}
@@ -205,6 +209,12 @@ if (( $+functions[add-zle-hook-widget] )); then
   bindkey '^[[Z' _tine_up    # shift+tab -> navigate up (Fig)
   bindkey '^I'   _tine_tab
   bindkey '^M'   _tine_enter
+  # Binding bare ESC makes zsh wait KEYTIMEOUT after every Esc to tell it apart
+  # from an escape sequence (arrows are ^[[A …), so the panel lingers ~KEYTIMEOUT
+  # before Esc dismisses it. Drop it to snappy if still at zsh's default (40 =
+  # 0.4s); leave a deliberately-set value alone. (Trade-off: at 1, multi-byte
+  # escape sequences can mis-split over very slow/SSH links — fine locally.)
+  [[ ${KEYTIMEOUT:-40} -eq 40 ]] && KEYTIMEOUT=1
   bindkey '^['   _tine_esc
   bindkey '^K'   _tine_detail
 fi
