@@ -18,6 +18,7 @@ struct SettingsView: View {
                          ("Monaco", "Monaco"), ("SF Mono", "SF Mono"),
                          ("Courier New", "Courier New")]
     private let shellLine = "source ~/.local/share/tine/tine.zsh"
+    static let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
 
     private var shellInstalled: Bool {
         FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.local/share/tine/tine.zsh")
@@ -120,6 +121,10 @@ struct SettingsView: View {
 
             Section {
                 Button("Quit tine", role: .destructive) { NSApplication.shared.terminate(nil) }
+            } footer: {
+                Text("tine \(Self.appVersion)")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .formStyle(.grouped)

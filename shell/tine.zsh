@@ -250,12 +250,20 @@ tine() {
       ;;
     install) _tine_install ;;
     doctor) _tine_doctor ;;
+    version|--version|-v)
+      if _tine_req version 2>/dev/null && [[ -n "$_TINE_REPLY" ]]; then
+        print -- "tine $_TINE_REPLY"
+      else
+        print -u2 -- "tine: app not running (start it with: tine restart)"; return 1
+      fi
+      ;;
     ""|help|-h|--help)
       print -- "usage: tine <command>"
       print -- "  dashboard   open the dashboard window"
       print -- "  doctor      check tine is set up correctly"
       print -- "  install     download the latest completion specs"
       print -- "  restart     quit and relaunch the app"
+      print -- "  version     print the running app version"
       ;;
     *) print -u2 -- "tine: unknown command: $1 (try: tine help)"; return 1 ;;
   esac

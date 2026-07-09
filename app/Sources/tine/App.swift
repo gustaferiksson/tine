@@ -140,6 +140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "started"
             case "installStatus":
                 return self.specInstaller?.statusLine ?? "idle"
+            case "version":
+                return (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"
             case "doctor":
                 // Health report for `tine doctor` (semicolon-joined key=value).
                 let v = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "?"

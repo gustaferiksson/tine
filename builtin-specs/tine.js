@@ -8,6 +8,11 @@ export default {
     { name: "doctor", description: "Check tine is set up correctly" },
     { name: "install", description: "Download the latest completion specs" },
     { name: "restart", description: "Quit and relaunch the app" },
+    { name: "version", description: "Print the running app version" },
     { name: "help", description: "Show usage" },
+  ],
+  options: [
+    { name: ["--version", "-v"], description: "Print the running app version" },
+    { name: ["--help", "-h"], description: "Show usage" },
   ],
 };
