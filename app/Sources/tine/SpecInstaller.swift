@@ -116,6 +116,15 @@ final class SpecInstaller: ObservableObject {
         try? String(contentsOfFile: markerPath, encoding: .utf8)
     }
 
+    /// Re-copy the app's built-in specs into the installed pack so they track the
+    /// running app version. The pack only re-merges them on download, so without
+    /// this an app update that changes builtin-specs/ (e.g. new `tine` subcommands)
+    /// would never reach an already-installed pack. Cheap — a couple of tiny files.
+    nonisolated static func refreshBuiltins() {
+        guard isInstalled() else { return }
+        mergeBuiltins(into: specsDir)
+    }
+
     nonisolated private static func downloadAndInstall() async throws -> Int {
         let fm = FileManager.default
         let (tmp, resp) = try await URLSession.shared.download(from: packURL)
@@ -162,7 +171,9 @@ final class SpecInstaller: ObservableObject {
 
         var names: [String] = []
         for f in files where f.hasSuffix(".js") {
-            try? fm.copyItem(atPath: "\(builtin)/\(f)", toPath: "\(dir)/\(f)")
+            let dest = "\(dir)/\(f)"
+            try? fm.removeItem(atPath: dest)   // overwrite: track the running app version
+            try? fm.copyItem(atPath: "\(builtin)/\(f)", toPath: dest)
             names.append(String(f.dropLast(3)))
         }
         guard !names.isEmpty else { return }

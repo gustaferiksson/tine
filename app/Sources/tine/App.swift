@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let installer = SpecInstaller()
         installer.onInstalled = { [weak self] in self?.scheduleRefresh() }
         if SpecInstaller.isInstalled() {
+            // Keep the app's built-in specs current with this app version, then
+            // check whether the fork has a newer pack.
+            SpecInstaller.refreshBuiltins()
             installer.checkForUpdate()
         } else {
             installer.install()
