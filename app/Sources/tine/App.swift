@@ -86,7 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     self.scheduleIdleHide() // keep visible, don't move
                 }
-                return "\(self.state.suggestions.count)"
+                // Report panel-is-active (>0), not the raw count: while a generator
+                // is still loading there are 0 suggestions yet, but the shell must
+                // keep Up/Down bound to us so nav works once results land.
+                return "\(self.state.hasContent ? max(self.state.suggestions.count, 1) : 0)"
             case "up":
                 // Let the key fall through to the terminal (zsh history) when the
                 // panel isn't actually showing, or when already at the top row —
