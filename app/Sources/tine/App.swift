@@ -109,6 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.state.moveSelection(1)
                 return "\(self.state.suggestions.count)"
             case "accept":
+                // The panel may have idle-hidden without the shell knowing, so its
+                // _TINE_ACTIVE is stale. Only accept when actually showing; else ""
+                // lets Enter fall through to a normal accept-line.
+                if self.panel?.isVisible != true { return "" }
                 // Fig's auto-execute row runs the line as-is instead of inserting.
                 if self.state.selectedIsExecute {
                     self.panel?.hidePanel()
@@ -127,6 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return ""
             case "prefix":
+                // Same guard as accept: ignore Tab when the panel isn't showing.
+                if self.panel?.isVisible != true { return "" }
                 // Fig's Tab: insert common prefix; keep the panel open.
                 if let (b, c) = self.state.commonPrefix() {
                     return "\(c)\(TINE_US)\(b)"
